@@ -2,9 +2,9 @@ package org.coralprotocol.coralserver.agent.registry.option
 
 import io.ktor.util.*
 import org.coralprotocol.coralserver.agent.exceptions.AgentOptionValidationException
-import java.nio.file.Path
-import kotlin.io.path.createTempFile
-import kotlin.io.path.writeBytes
+import org.coralprotocol.coralserver.config.DockerConfig
+import org.coralprotocol.coralserver.session.SessionAgentDisposableResource
+import org.coralprotocol.coralserver.session.SessionAgentExecutionContext
 
 sealed interface AgentOptionWithValue {
     data class String(
@@ -213,12 +213,13 @@ fun AgentOptionWithValue.asEnvVarValue(): String = when (this) {
  * Writes the value of this option to file(s) using the values [AgentOptionValue.toFileSystemValue] function.  Note that
  * the return type is always a list.  For single value type options, a list with 1 value will be returned.  For list-type
  * options, a list of temporary files; one for every value in the option, will be returned.
+ *
+ * The temporary files are represented by the [SessionAgentDisposableResource.TemporaryFile] type, which is only
+ * designed for use in [SessionAgentExecutionContext]
  */
-fun AgentOptionWithValue.asFileSystemValue(): List<Path> {
+fun AgentOptionWithValue.asFileSystemValue(dockerConfig: DockerConfig): List<SessionAgentDisposableResource.TemporaryFile> {
     return value().toFileSystemValue().map {
-        val path = createTempFile(suffix = ".opt")
-        path.writeBytes(it)
-        path
+        SessionAgentDisposableResource.TemporaryFile(it, dockerConfig)
     }
 }
 
@@ -227,8 +228,8 @@ fun AgentOptionWithValue.asFileSystemValue(): List<Path> {
  * logging, this will the incorrect value for environment variables.
  */
 fun AgentOptionWithValue.toDisplayString(): String = when (this) {
-    is AgentOptionWithValue.Blob -> value.value.encodeBase64()
-    is AgentOptionWithValue.BlobList -> value.value.joinToString(",") { it.encodeBase64() }
+    is AgentOptionWithValue.Blob -> "${value.value.size}b blob"
+    is AgentOptionWithValue.BlobList -> value.value.joinToString(",") { "${it.size}b blob" }
     is AgentOptionWithValue.Boolean -> if (value.value) { "1" } else { "0" }
     is AgentOptionWithValue.Byte -> value.value.toString()
     is AgentOptionWithValue.ByteList -> value.value.joinToString(",")

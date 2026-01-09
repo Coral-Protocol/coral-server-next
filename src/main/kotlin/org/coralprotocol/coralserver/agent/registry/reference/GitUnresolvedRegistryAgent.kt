@@ -1,39 +1,43 @@
 package org.coralprotocol.coralserver.agent.registry.reference
 
 import com.github.syari.kgit.KGit
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import org.coralprotocol.coralserver.agent.registry.*
-import org.coralprotocol.coralserver.routes.api.v1.filterNotNullValues
+import org.coralprotocol.coralserver.config.CacheConfig
+import org.coralprotocol.coralserver.logging.Logger
+import org.coralprotocol.coralserver.modules.LOGGER_CONFIG
+import org.koin.core.component.inject
+import org.koin.core.qualifier.named
 import java.nio.file.Path
 import java.util.*
 import kotlin.io.path.isDirectory
-
-private val logger = KotlinLogging.logger {}
 
 /**
  * An agent referenced by a Git repository
  */
 @Serializable
 @SerialName("git")
-data class GitUnresolvedRegistryAgent (
+data class GitUnresolvedRegistryAgent(
     val repo: String,
     val branch: String? = null,
     val tag: String? = null,
     val rev: String? = null,
 ) : UnresolvedRegistryAgent() {
+    private val cacheConfig: CacheConfig by inject()
+    private val logger by inject<Logger>(named(LOGGER_CONFIG))
+
     @Transient
     private val encoder = Base64.getUrlEncoder()
 
     override fun resolve(context: AgentResolutionContext): List<RegistryAgent> {
         val safeRepoName = encoder.encodeToString(repo.toByteArray())
-        val identifiers = mapOf(
-            "branch" to branch,
-            "tag" to tag,
-            "rev" to rev,
-        ).filterNotNullValues()
+        val identifiers = buildMap {
+            branch?.let { put("branch", it) }
+            tag?.let { put("branch", it) }
+            rev?.let { put("branch", it) }
+        }
 
         // Instead of some arcane priority logic, it will be an error if more than one identifier is specified.
         if (identifiers.size > 1) {
@@ -46,7 +50,7 @@ data class GitUnresolvedRegistryAgent (
             ?: throw RegistryException("git-agent (repo $repo) must specify one of branch, tag, or rev")
 
         val safeRepoPath = Path.of(safeRepoName, idType, encoder.encodeToString(idValue.toByteArray()))
-        val fullRepoPath = context.registryResolutionContext.config.cache.agent.resolve(safeRepoPath)
+        val fullRepoPath = cacheConfig.agent.resolve(safeRepoPath)
         val fullAgentTomlPath = fullRepoPath.resolve(AGENT_FILE)
 
         if (!fullAgentTomlPath.toFile().exists()) {
@@ -70,19 +74,19 @@ data class GitUnresolvedRegistryAgent (
                 setURI(repo)
                 setTimeout(60)
             }
-        }
-        else {
+        } else {
             logger.info { "Using previously checked out repo $fullRepoPath for agent repo $repo" }
         }
 
         try {
-            return listOf(resolveRegistryAgentFromStream(
-                file = fullAgentTomlPath.toFile(),
-                context = context.registryResolutionContext,
-                exportSettings = unresolvedExportSettings
-            ))
-        }
-        catch (e: Exception) {
+            return listOf(
+                resolveRegistryAgentFromStream(
+                    file = fullAgentTomlPath.toFile(),
+                    context = context.registryResolutionContext,
+                    exportSettings = unresolvedExportSettings
+                )
+            )
+        } catch (e: Exception) {
             logger.error { "Could not parse $fullAgentTomlPath provided by git repo $repo ($idType=$idValue)" }
             throw e
         }

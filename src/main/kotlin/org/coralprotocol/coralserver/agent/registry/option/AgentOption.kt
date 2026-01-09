@@ -2,7 +2,6 @@
 
 package org.coralprotocol.coralserver.agent.registry.option
 
-import io.github.oshai.kotlinlogging.KotlinLogging
 import io.github.smiley4.schemakenerator.core.annotations.Optional
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -10,15 +9,23 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonClassDiscriminator
 import org.coralprotocol.coralserver.agent.registry.AgentResolutionContext
 import org.coralprotocol.coralserver.agent.registry.CURRENT_AGENT_EDITION
-
-private val logger = KotlinLogging.logger { }
+import org.coralprotocol.coralserver.logging.Logger
+import org.coralprotocol.coralserver.modules.LOGGER_CONFIG
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import org.koin.core.qualifier.named
 
 @Serializable
 @JsonClassDiscriminator("type")
-sealed class AgentOption {
-    @Optional var required: kotlin.Boolean = false
+sealed class AgentOption : KoinComponent {
+    private val logger by inject<Logger>(named(LOGGER_CONFIG))
+
+    @Optional
+    var required: kotlin.Boolean = false
     var display: AgentOptionDisplay? = null
-    @Optional var transport: AgentOptionTransport = AgentOptionTransport.ENVIRONMENT_VARIABLE
+
+    @Optional
+    var transport: AgentOptionTransport = AgentOptionTransport.ENVIRONMENT_VARIABLE
 
     /**
      * Description field should now be set in the display field class. This property is deprecated.
@@ -45,24 +52,28 @@ sealed class AgentOption {
             return
 
         if (description != null) {
-            logger.warn { """
+            logger.warn {
+                """
                 $locator has deprecated 'description' field.  Agent option description should now be set under the 'display' table, for example:
                 
                 [display]:
                 description: "$description"
-            """.trimIndent() }
+                """.trimIndent()
+            }
         }
 
         if (this is Number)
             logger.warn { "$locator has deprecated 'number' type.  In edition $edition the 'number' type was renamed to 'f64'." }
 
         if (this is Secret) {
-            logger.warn { """
+            logger.warn {
+                """
                 $locator has deprecated 'secret' type.  In edition $edition the 'secret' has been changed to:
                 
                 type = "string"
                 secret = true
-            """.trimIndent() }
+                """.trimIndent()
+            }
         }
 
         if (required && defaultAsValue() != null)
@@ -427,3 +438,13 @@ fun AgentOption.compareTypeWithValue(value: AgentOptionValue) =
         is AgentOption.UShort -> value is AgentOptionValue.UShort
         is AgentOption.UShortList -> value is AgentOptionValue.UShortList
     }
+
+fun AgentOption.buildFullOption(
+    name: String,
+    description: String,
+    required: Boolean
+): Pair<String, AgentOption> {
+    this.display = AgentOptionDisplay(description = description)
+    this.required = required
+    return name to this
+}

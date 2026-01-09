@@ -1,33 +1,39 @@
 package org.coralprotocol.coralserver.agent.registry.indexer
 
 import com.github.syari.kgit.KGit
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.Serializable
 import org.coralprotocol.coralserver.agent.registry.*
-import org.coralprotocol.coralserver.config.Config
+import org.coralprotocol.coralserver.agent.runtime.RuntimeId
+import org.coralprotocol.coralserver.config.CacheConfig
+import org.coralprotocol.coralserver.config.RootConfig
+import org.coralprotocol.coralserver.logging.Logger
+import org.coralprotocol.coralserver.modules.LOGGER_CONFIG
 import org.eclipse.jgit.api.ResetCommand
 import org.eclipse.jgit.lib.SubmoduleConfig
+import org.koin.core.component.inject
+import org.koin.core.qualifier.named
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
-
-private val logger = KotlinLogging.logger {}
 
 @Serializable
 data class GitRegistryAgentIndexer(
     val url: String,
     override val priority: Int
 ) : RegistryAgentIndexer {
+    private val logger by inject<Logger>(named(LOGGER_CONFIG))
+    private val cacheConfig: CacheConfig by inject()
+
     private fun indexerPath(cachePath: Path, indexerName: String) =
         cachePath.resolve(Path.of(indexerName))
 
     override fun resolveAgent(
         context: RegistryResolutionContext,
-        exportSettings: UnresolvedAgentExportSettingsMap,
+        exportSettings: Map<RuntimeId, UnresolvedAgentExportSettings>,
         indexerName: String,
         agentName: String,
         version: String
     ): RegistryAgent {
-        val path = indexerPath(context.config.cache.index, indexerName)
+        val path = indexerPath(cacheConfig.index, indexerName)
 
         val agentTomlFile = path.resolve(Path.of(version, agentName, AGENT_FILE))
         if (!agentTomlFile.toFile().exists()) {
@@ -40,15 +46,14 @@ data class GitRegistryAgentIndexer(
                 context = context,
                 exportSettings = exportSettings
             )
-        }
-        catch (e: Exception) {
+        } catch (e: Exception) {
             logger.error { "Could not parse agent $agentName provided by indexer $indexerName ($agentTomlFile)" }
             throw e
         }
     }
 
-    override fun update(config: Config, indexerName: String) {
-        val path = indexerPath(config.cache.index, indexerName)
+    override fun update(config: RootConfig, indexerName: String) {
+        val path = indexerPath(config.cacheConfig.index, indexerName)
 
         try {
             val repo = if (!path.resolve(".git").isDirectory()) {
@@ -58,8 +63,7 @@ data class GitRegistryAgentIndexer(
                     setURI(url)
                     setTimeout(60)
                 }
-            }
-            else {
+            } else {
                 KGit.open(path.toFile())
             }
 
@@ -75,8 +79,7 @@ data class GitRegistryAgentIndexer(
             repo.submoduleUpdate {
                 setFetch(true)
             }
-        }
-        catch (e: Exception) {
+        } catch (e: Exception) {
             throw RegistryException("Error while updating indexer $indexerName: $e")
         }
     }

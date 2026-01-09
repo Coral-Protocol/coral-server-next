@@ -7,23 +7,25 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonClassDiscriminator
 import org.coralprotocol.coralserver.agent.registry.RegistryAgent
 import org.coralprotocol.coralserver.agent.registry.RegistryResolutionContext
-import org.coralprotocol.coralserver.agent.registry.UnresolvedAgentExportSettingsMap
-import org.coralprotocol.coralserver.config.Config
+import org.coralprotocol.coralserver.agent.registry.UnresolvedAgentExportSettings
+import org.coralprotocol.coralserver.agent.runtime.RuntimeId
+import org.coralprotocol.coralserver.config.RootConfig
+import org.koin.core.component.KoinComponent
 
 @Serializable
 @JsonClassDiscriminator("type")
-sealed interface RegistryAgentIndexer {
+sealed interface RegistryAgentIndexer : KoinComponent {
     val priority: Int
     fun resolveAgent(
         context: RegistryResolutionContext,
-        exportSettings: UnresolvedAgentExportSettingsMap,
+        exportSettings: Map<RuntimeId, UnresolvedAgentExportSettings>,
         indexerName: String,
         agentName: String,
         version: String
     ): RegistryAgent
 
     fun update(
-        config: Config,
+        config: RootConfig,
         indexerName: String,
     )
 }

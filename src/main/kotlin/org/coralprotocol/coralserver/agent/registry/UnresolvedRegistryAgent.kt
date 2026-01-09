@@ -5,13 +5,15 @@ package org.coralprotocol.coralserver.agent.registry
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import org.coralprotocol.coralserver.agent.runtime.RuntimeId
+import org.koin.core.component.KoinComponent
 
 const val AGENT_FILE = "coral-agent.toml"
 
 @Serializable
 abstract class UnresolvedRegistryAgent(
     @SerialName("export")
-    var unresolvedExportSettings: UnresolvedAgentExportSettingsMap = mapOf()
-) {
+    var unresolvedExportSettings: Map<RuntimeId, UnresolvedAgentExportSettings> = mapOf()
+) : KoinComponent {
     abstract fun resolve(context: AgentResolutionContext): List<RegistryAgent>
 }

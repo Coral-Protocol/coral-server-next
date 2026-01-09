@@ -2,53 +2,70 @@
 
 package org.coralprotocol.coralserver.agent.registry
 
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import net.peanuuutz.tomlkt.decodeFromNativeReader
 import org.coralprotocol.coralserver.agent.registry.option.AgentOption
 import org.coralprotocol.coralserver.agent.registry.option.defaultAsValue
 import org.coralprotocol.coralserver.agent.runtime.LocalAgentRuntimes
 import org.coralprotocol.coralserver.agent.runtime.RuntimeId
 import org.coralprotocol.coralserver.config.SecurityConfig
-import org.coralprotocol.coralserver.routes.api.v1.filterNotNullValues
+import org.coralprotocol.coralserver.config.toml
 import java.io.File
 import java.nio.file.Path
-
-private val logger = KotlinLogging.logger {  }
 
 const val FIRST_AGENT_EDITION = 1
 const val CURRENT_AGENT_EDITION = 2
 
-class RegistryAgent(
-    val info: RegistryAgentInfo,
+@Serializable
+data class RegistryAgent(
+    private val info: RegistryAgentInfo,
     val runtimes: LocalAgentRuntimes,
-    val options: Map<String, AgentOption>,
-    val path: Path,
-    unresolvedExportSettings: UnresolvedAgentExportSettingsMap
+    val options: Map<String, AgentOption> = mapOf(),
+
+    @Transient
+    val path: Path? = null,
+
+    @Transient
+    private val unresolvedExportSettings: Map<RuntimeId, UnresolvedAgentExportSettings> = mapOf(),
 ) {
+    @Transient
+    val description = info.description
+
+    @Transient
+    val identifier = info.identifier
+
+    @Transient
+    val name = identifier.name
+
+    @Transient
+    val version = identifier.version
+
     val exportSettings: AgentExportSettingsMap = unresolvedExportSettings.mapValues { (runtime, settings) ->
         settings.resolve(runtime, this)
     }
 
+    @Transient
     val defaultOptions = options
-        .mapValues { (name, option) -> option.defaultAsValue() }
-        .filterNotNullValues()
+        .mapNotNull { (name, option) -> option.defaultAsValue()?.let { name to it } }
+        .toMap()
 
+    @Transient
     val requiredOptions = options
         .filterValues { it.required }
 }
 
 @Serializable
 data class PublicRegistryAgent(
-    val id: AgentRegistryIdentifier,
+    val id: RegistryAgentIdentifier,
     val runtimes: List<RuntimeId>,
     val options: Map<String, AgentOption>,
     val exportSettings: PublicAgentExportSettingsMap
 )
 
 fun RegistryAgent.toPublic(): PublicRegistryAgent = PublicRegistryAgent(
-    id = info.identifier,
+    id = identifier,
     runtimes = runtimes.toRuntimeIds(),
     options = options,
     exportSettings = exportSettings.mapValues { (_, settings) -> settings.toPublic() }
@@ -68,22 +85,24 @@ fun RegistryAgent.toPublic(): PublicRegistryAgent = PublicRegistryAgent(
 fun resolveRegistryAgentFromStream(
     file: File,
     context: RegistryResolutionContext,
-    exportSettings: UnresolvedAgentExportSettingsMap
+    exportSettings: Map<RuntimeId, UnresolvedAgentExportSettings>
 ): RegistryAgent {
-    val unresolved = context.serializer.decodeFromNativeReader<UnresolvedInlineRegistryAgent>(file.reader())
-    if (!context.config.security.enableReferencedExporting) {
-        if (unresolved.unresolvedExportSettings.isNotEmpty()) {
-            logger.warn { "Referenced agent file $file contains export settings, but [security.enableReferencedExporting] is false. Export settings in this file will be ignored" }
-        }
+    val unresolved = toml.decodeFromNativeReader<UnresolvedInlineRegistryAgent>(file.reader())
+//    if (!context.config.securityConfig.enableReferencedExporting) {
+//        if (unresolved.unresolvedExportSettings.isNotEmpty()) {
+//            logger.warn { "Referenced agent file $file contains export settings, but [security.enableReferencedExporting] is false. Export settings in this file will be ignored" }
+//        }
+//
+//        unresolved.unresolvedExportSettings = exportSettings
+//    }
+//    else {
+//        unresolved.unresolvedExportSettings += exportSettings
+//    }
 
-        unresolved.unresolvedExportSettings = exportSettings
-    }
-    else {
-        unresolved.unresolvedExportSettings += exportSettings
-    }
-
-    return unresolved.resolve(AgentResolutionContext(
-        registryResolutionContext = context,
-        path = file.toPath().parent
-    )).first()
+    return unresolved.resolve(
+        AgentResolutionContext(
+            registryResolutionContext = context,
+            path = file.toPath().parent
+        )
+    ).first()
 }

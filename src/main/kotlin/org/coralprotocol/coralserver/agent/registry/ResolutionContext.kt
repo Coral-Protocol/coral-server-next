@@ -1,11 +1,9 @@
 package org.coralprotocol.coralserver.agent.registry
 
-import net.peanuuutz.tomlkt.Toml
-import org.coralprotocol.coralserver.config.Config
 import java.nio.file.Path
 import kotlin.io.path.exists
 
-abstract class ResolutionContext() {
+abstract class ResolutionContext {
     abstract val path: Path
 
     /**
@@ -23,8 +21,7 @@ abstract class ResolutionContext() {
 }
 
 data class RegistryResolutionContext(
-    val serializer: Toml,
-    val config: Config,
+    val registrySourceIdentifier: AgentRegistrySourceIdentifier,
     override val path: Path
 ) : ResolutionContext()
 
