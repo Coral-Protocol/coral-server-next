@@ -2,8 +2,6 @@
 
 package org.coralprotocol.coralserver.logging
 
-import io.github.oshai.kotlinlogging.KLogger
-import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -12,7 +10,7 @@ import org.slf4j.MDC
 
 class Logger(
     bufferSize: Int = 1024,
-    val nativeLogger: KLogger = KotlinLogging.logger { },
+    val nativeLogger: org.slf4j.Logger
 ) : KoinComponent, LoggingInterface {
     val flow = MutableSharedFlow<LoggingEvent>(
         replay = bufferSize,
