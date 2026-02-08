@@ -2,6 +2,7 @@ package org.coralprotocol.coralserver.session
 
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.throwables.shouldThrow
+import io.kotest.core.NamedTag
 import io.kotest.inspectors.shouldForAll
 import io.kotest.matchers.booleans.shouldBeFalse
 import io.kotest.matchers.booleans.shouldBeTrue
@@ -15,10 +16,10 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.ktor.client.*
 import io.ktor.client.plugins.resources.*
 import io.ktor.client.plugins.sse.*
-import io.modelcontextprotocol.kotlin.sdk.Implementation
-import io.modelcontextprotocol.kotlin.sdk.ListToolsResult
 import io.modelcontextprotocol.kotlin.sdk.client.Client
 import io.modelcontextprotocol.kotlin.sdk.client.SseClientTransport
+import io.modelcontextprotocol.kotlin.sdk.types.Implementation
+import io.modelcontextprotocol.kotlin.sdk.types.ListToolsResult
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -28,7 +29,7 @@ import org.coralprotocol.coralserver.agent.graph.GraphAgentProvider
 import org.coralprotocol.coralserver.agent.graph.plugin.GraphAgentPlugin
 import org.coralprotocol.coralserver.agent.runtime.RuntimeId
 import org.coralprotocol.coralserver.mcp.McpToolName
-import org.coralprotocol.coralserver.routes.sse.v1.Mcp
+import org.coralprotocol.coralserver.routes.mcp.v1.Sse
 import org.coralprotocol.coralserver.utils.dsl.graphAgentPair
 import org.coralprotocol.coralserver.utils.synchronizedMessageTransaction
 import org.koin.test.inject
@@ -36,7 +37,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class SessionTest : CoralTest({
     suspend fun HttpClient.sseHandshake(secret: String) {
-        this.sse(this.href(Mcp.Sse(agentSecret = secret))) {
+        this.sse(this.href(Sse(agentSecret = secret))) {
             // We will get a session so long as the agent secret is valid, the following line makes sure a connection
             // was established on the server by waiting for one message
             incoming.take(1).collect {}
@@ -201,7 +202,7 @@ class SessionTest : CoralTest({
 
     }
 
-    test("testMentions").config(coroutineTestScope = true) {
+    test("testMentions").config(coroutineTestScope = true, tags = setOf(NamedTag("noisy"))) {
         val localSessionManager by inject<LocalSessionManager>()
 
         val session = localSessionManager.createSession(
@@ -405,7 +406,7 @@ class SessionTest : CoralTest({
             )
         )
 
-        suspend fun toolsForAgent(name: String): ListToolsResult? {
+        suspend fun toolsForAgent(name: String): ListToolsResult {
             val agent1 = session1.getAgent(name)
 
             val mcpClient = Client(
@@ -417,7 +418,7 @@ class SessionTest : CoralTest({
 
             val transport = SseClientTransport(
                 client = client,
-                urlString = client.href(Mcp.Sse(agentSecret = agent1.secret))
+                urlString = client.href(Sse(agentSecret = agent1.secret))
             )
             mcpClient.connect(transport)
             return mcpClient.listTools()

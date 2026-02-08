@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.kotlin.dsl.invoke
 
 plugins {
@@ -35,7 +36,7 @@ repositories {
 dependencies {
     testImplementation(kotlin("test"))
     implementation("org.coralprotocol.payment:blockchain:0.1.1:all")
-    implementation("io.modelcontextprotocol:kotlin-sdk:0.6.0") {}
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.8.3") {}
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
@@ -81,6 +82,7 @@ dependencies {
     implementation("io.ktor:ktor-server-content-negotiation")
     implementation("io.ktor:ktor-server-resources")
     implementation("io.ktor:ktor-serialization-kotlinx-json")
+    implementation("io.ktor:ktor-server-websockets:${ktorVersion}")
     testImplementation("io.ktor:ktor-server-core")
     testImplementation("io.ktor:ktor-server-cio")
     testImplementation("io.ktor:ktor-server-sse")
@@ -108,12 +110,17 @@ dependencies {
     implementation("io.insert-koin:koin-test")
 
     // hoplite
-    val hopliteVersion = "3.0.0.RC1"
+    val hopliteVersion = "2.9.0"
     implementation("com.sksamuel.hoplite:hoplite-core:${hopliteVersion}")
     implementation("com.sksamuel.hoplite:hoplite-toml:${hopliteVersion}")}
 
 tasks.test {
     useJUnitPlatform()
+    testLogging {
+        exceptionFormat = TestExceptionFormat.FULL
+        showExceptions = true
+        showStandardStreams = true
+    }
 }
 
 tasks.jar {

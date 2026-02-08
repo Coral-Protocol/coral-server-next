@@ -5,21 +5,30 @@ import io.kotest.matchers.collections.shouldNotBeEmpty
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.ktor.client.*
+import io.modelcontextprotocol.kotlin.sdk.client.Client
 import org.coralprotocol.coralserver.CoralTest
 import org.coralprotocol.coralserver.agent.graph.AgentGraph
 import org.coralprotocol.coralserver.agent.graph.GraphAgentProvider
 import org.coralprotocol.coralserver.agent.graph.plugin.GraphAgentPlugin
+import org.coralprotocol.coralserver.agent.runtime.FunctionRuntime
 import org.coralprotocol.coralserver.agent.runtime.RuntimeId
 import org.coralprotocol.coralserver.mcp.McpToolManager
 import org.coralprotocol.coralserver.mcp.tools.*
-import org.coralprotocol.coralserver.util.mcpFunctionRuntime
+import org.coralprotocol.coralserver.util.sseFunctionRuntime
+import org.coralprotocol.coralserver.util.streamableHttpFunctionRuntime
 import org.coralprotocol.coralserver.utils.dsl.graphAgentPair
 import org.coralprotocol.coralserver.utils.synchronizedMessageTransaction
 import org.koin.test.inject
 import java.util.*
 
 class McpToolsTest : CoralTest({
-    test("commonTools") {
+    suspend fun testCommonTools(
+        runtimeProvider: HttpClient.(
+            name: String,
+            version: String,
+            func: suspend (Client, LocalSession) -> Unit
+        ) -> FunctionRuntime
+    ) {
         val localSessionManager by inject<LocalSessionManager>()
         val client by inject<HttpClient>()
         val mcpToolManager by inject<McpToolManager>()
@@ -32,12 +41,12 @@ class McpToolsTest : CoralTest({
         val agent2Name = "agent2"
         val agent3Name = "agent3"
 
-        localSessionManager.createSession(
+        val (session, _) = localSessionManager.createSession(
             "test", AgentGraph(
                 agents = mapOf(
                     graphAgentPair(agent1Name) {
                         registryAgent {
-                            runtime(client.mcpFunctionRuntime(name, version) { client, session ->
+                            runtime(client.runtimeProvider(name, version) { client, session ->
                                 val agent2 = session.getAgent(agent2Name)
                                 val agent3 = session.getAgent(agent3Name)
 
@@ -45,7 +54,7 @@ class McpToolsTest : CoralTest({
                                 val createThreadResult =
                                     mcpToolManager.createThreadTool.executeOn(
                                         client,
-                                        CreateThreadInput(threadName, setOf(agent2Name))
+                                        CreateThreadInput(threadName, listOf(agent2Name))
                                     )
 
                                 createThreadResult.thread.name shouldBe threadName
@@ -56,7 +65,7 @@ class McpToolsTest : CoralTest({
                                 agent2.synchronizedMessageTransaction {
                                     val sendMessageResult = mcpToolManager.sendMessageTool.executeOn(
                                         client,
-                                        SendMessageInput(createThreadResult.thread.id, singleMessageText, setOf())
+                                        SendMessageInput(createThreadResult.thread.id, singleMessageText, listOf())
                                     )
 
                                     assert(sendMessageResult.message.text == singleMessageText)
@@ -69,7 +78,7 @@ class McpToolsTest : CoralTest({
                                 agent2.synchronizedMessageTransaction {
                                     mcpToolManager.sendMessageTool.executeOn(
                                         client,
-                                        SendMessageInput(createThreadResult.thread.id, agentMessageText, setOf())
+                                        SendMessageInput(createThreadResult.thread.id, agentMessageText, listOf())
                                     ).message.id
                                 }
 
@@ -78,14 +87,14 @@ class McpToolsTest : CoralTest({
                                         // not mentioned, should not be picked up
                                         mcpToolManager.sendMessageTool.executeOn(
                                             client,
-                                            SendMessageInput(createThreadResult.thread.id, "spam", setOf())
+                                            SendMessageInput(createThreadResult.thread.id, "spam", listOf())
                                         )
                                     }
 
                                     // does mention, should be picked up
                                     mcpToolManager.sendMessageTool.executeOn(
                                         client,
-                                        SendMessageInput(createThreadResult.thread.id, mentionText, setOf(agent2Name))
+                                        SendMessageInput(createThreadResult.thread.id, mentionText, listOf(agent2Name))
                                     ).message.id
                                 }
 
@@ -98,7 +107,7 @@ class McpToolsTest : CoralTest({
 
                                     mcpToolManager.sendMessageTool.executeOn(
                                         client,
-                                        SendMessageInput(createThreadResult.thread.id, mentionText, setOf(agent3Name))
+                                        SendMessageInput(createThreadResult.thread.id, mentionText, listOf(agent3Name))
                                     ).message.id
                                 }
                             })
@@ -108,7 +117,7 @@ class McpToolsTest : CoralTest({
                     },
                     graphAgentPair(agent2Name) {
                         registryAgent {
-                            runtime(client.mcpFunctionRuntime(name, version) { client, session ->
+                            runtime(client.runtimeProvider(name, version) { client, session ->
                                 val singleMessageResult =
                                     mcpToolManager.waitForMessageTool.executeOn(client, WaitForSingleMessageInput)
                                 singleMessageResult.message?.text shouldBe singleMessageText
@@ -129,7 +138,7 @@ class McpToolsTest : CoralTest({
                     },
                     graphAgentPair(agent3Name) {
                         registryAgent {
-                            runtime(client.mcpFunctionRuntime(name, version) { client, session ->
+                            runtime(client.runtimeProvider(name, version) { client, session ->
                                 val agent3 = session.getAgent(agent3Name)
 
                                 val mentionMessageResult =
@@ -168,5 +177,15 @@ class McpToolsTest : CoralTest({
                     }
                 )
             ))
+
+        session.fullLifeCycle()
+    }
+
+    test("testSseCommonTools") {
+        testCommonTools(HttpClient::sseFunctionRuntime)
+    }
+
+    test("testStreamableHttpCommonTools") {
+        testCommonTools(HttpClient::streamableHttpFunctionRuntime)
     }
 })

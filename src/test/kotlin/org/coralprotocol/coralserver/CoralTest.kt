@@ -1,5 +1,6 @@
 package org.coralprotocol.coralserver
 
+import io.kotest.core.NamedTag
 import io.kotest.core.spec.RootTest
 import io.kotest.core.spec.style.FunSpec
 import io.ktor.client.*
@@ -15,6 +16,7 @@ import io.ktor.server.testing.*
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.plus
 import kotlinx.serialization.json.Json
+import net.peanuuutz.tomlkt.Toml
 import org.coralprotocol.coralserver.agent.runtime.ApplicationRuntimeContext
 import org.coralprotocol.coralserver.config.*
 import org.coralprotocol.coralserver.logging.Logger
@@ -24,13 +26,13 @@ import org.coralprotocol.coralserver.session.LocalSessionManager
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.context.stopKoin
-import org.koin.core.logger.PrintLogger
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import org.koin.environmentProperties
 import org.koin.test.KoinTest
 import org.slf4j.LoggerFactory
+import org.slf4j.event.Level
 import java.util.*
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
 
@@ -39,36 +41,6 @@ abstract class CoralTest(body: CoralTest.() -> Unit) : KoinTest, FunSpec(body as
     val authToken = UUID.randomUUID().toString()
     val unitTestSecret = UUID.randomUUID().toString()
     val logBufferSize = 1024
-    val config = RootConfig(
-        // port for testing is zero
-        networkConfig = NetworkConfig(
-            bindPort = 0u
-        ),
-        paymentConfig = PaymentConfig(
-            wallets = listOf(
-                Wallet.Solana(
-                    name = "fake test wallet",
-                    cluster = SolanaCluster.DEV_NET,
-                    keypairPath = "fake-test-wallet.json",
-                    walletAddress = "this is not a real wallet address"
-                )
-            ),
-            remoteAgentWalletName = "fake test wallet"
-        ),
-        registryConfig = RegistryConfig(
-            includeDebugAgents = true
-        ),
-        authConfig = AuthConfig(
-            keys = setOf(authToken)
-        ),
-        debugConfig = DebugConfig(
-            additionalDockerEnvironment = mapOf("UNIT_TEST_SECRET" to unitTestSecret),
-            additionalExecutableEnvironment = mapOf("UNIT_TEST_SECRET" to unitTestSecret)
-        ),
-        loggingConfig = LoggingConfig(
-            logBufferSize = logBufferSize.toUInt(),
-        )
-    )
 
     fun HttpRequestBuilder.withAuthToken() {
         headers.append(HttpHeaders.Authorization, "Bearer $authToken")
@@ -119,12 +91,74 @@ abstract class CoralTest(body: CoralTest.() -> Unit) : KoinTest, FunSpec(body as
                         runTestApplication {
                             startKoin {
                                 environmentProperties()
-                                logger(PrintLogger())
                                 modules(
-                                    configModuleParts,
-                                    blockchainModule,
-                                    agentModule,
                                     module {
+                                        singleOf(::ApplicationRuntimeContext)
+                                        single {
+                                            RootConfig(
+                                                // port for testing is zero
+                                                networkConfig = NetworkConfig(
+                                                    bindPort = 0u
+                                                ),
+                                                paymentConfig = PaymentConfig(
+                                                    wallets = listOf(
+                                                        Wallet.Solana(
+                                                            name = "fake test wallet",
+                                                            cluster = SolanaCluster.DEV_NET,
+                                                            keypairPath = "fake-test-wallet.json",
+                                                            walletAddress = "this is not a real wallet address"
+                                                        )
+                                                    ),
+                                                    remoteAgentWalletName = "fake test wallet"
+                                                ),
+                                                registryConfig = RegistryConfig(
+                                                    includeDebugAgents = true,
+                                                    localAgents = listOf()
+                                                ),
+                                                authConfig = AuthConfig(
+                                                    keys = setOf(authToken)
+                                                ),
+                                                debugConfig = DebugConfig(
+                                                    additionalDockerEnvironment = mapOf("UNIT_TEST_SECRET" to unitTestSecret),
+                                                    additionalExecutableEnvironment = mapOf("UNIT_TEST_SECRET" to unitTestSecret)
+                                                ),
+                                                loggingConfig = LoggingConfig(
+                                                    logBufferSize = logBufferSize.toUInt(),
+                                                    logToFileEnabled = false,
+                                                    consoleLogLevel = if (test.config?.tags?.contains(NamedTag("noisy")) == true) {
+                                                        Level.WARN
+                                                    } else if (test.config?.tags?.contains(NamedTag("debug")) == true) {
+                                                        Level.TRACE
+                                                    } else {
+                                                        Level.INFO
+                                                    }
+                                                )
+                                            )
+                                        }
+                                    },
+                                    configModuleParts,
+                                    loggingModule,
+                                    module {
+                                        single<Logger>(named(LOGGER_ROUTES)) { prodLogger }
+                                        single<Logger>(named(LOGGER_CONFIG)) { prodLogger }
+                                        single<Logger>(named(LOGGER_LOCAL_SESSION)) { prodLogger }
+
+                                        single<Logger>(named(LOGGER_LOG_API)) { testLogger }
+                                        single<Logger>(named(LOGGER_TEST)) { testLogger }
+                                    },
+                                    module {
+                                        single {
+                                            Json {
+                                                encodeDefaults = true
+                                                prettyPrint = true
+                                                explicitNulls = false
+                                            }
+                                        }
+                                        single {
+                                            Toml {
+                                                ignoreUnknownKeys = false
+                                            }
+                                        }
                                         single {
                                             createClient {
                                                 install(Resources)
@@ -137,25 +171,8 @@ abstract class CoralTest(body: CoralTest.() -> Unit) : KoinTest, FunSpec(body as
                                             }
                                         }
                                     },
-                                    module {
-                                        singleOf(::ApplicationRuntimeContext)
-                                        single { config }
-                                        single {
-                                            Json {
-                                                encodeDefaults = true
-                                                prettyPrint = true
-                                                explicitNulls = false
-                                            }
-                                        }
-                                    },
-                                    module {
-                                        single<Logger>(named(LOGGER_ROUTES)) { prodLogger }
-                                        single<Logger>(named(LOGGER_CONFIG)) { prodLogger }
-                                        single<Logger>(named(LOGGER_LOCAL_SESSION)) { prodLogger }
-
-                                        single<Logger>(named(LOGGER_LOG_API)) { testLogger }
-                                        single<Logger>(named(LOGGER_TEST)) { testLogger }
-                                    },
+                                    blockchainModule,
+                                    agentModule,
                                     module {
                                         single {
                                             LocalSessionManager(
@@ -182,7 +199,7 @@ abstract class CoralTest(body: CoralTest.() -> Unit) : KoinTest, FunSpec(body as
                             }
 
 
-                            application.coralServerModule()
+                            application.coralServerModule(true)
 
                             loadKoinModules(module { single { application } })
 

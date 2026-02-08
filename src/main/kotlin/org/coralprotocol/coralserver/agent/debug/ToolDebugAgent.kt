@@ -1,8 +1,8 @@
 package org.coralprotocol.coralserver.agent.debug
 
 import io.ktor.client.*
-import io.modelcontextprotocol.kotlin.sdk.*
 import io.modelcontextprotocol.kotlin.sdk.client.Client
+import io.modelcontextprotocol.kotlin.sdk.types.*
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -67,27 +67,22 @@ class ToolDebugAgent(client: HttpClient) : DebugAgent(client) {
 
         try {
             val response =
-                client.callTool(CallToolRequest(toolName, json.decodeFromString(toolInput)))
-
-            if (response == null) {
-                agent.logger.warn { "Failed to call tool $toolName: no response" }
-                return
-            }
+                client.callTool(CallToolRequest(CallToolRequestParams(toolName, json.decodeFromString(toolInput))))
 
             val text = response.content.joinToString("\n") {
                 when (it) {
                     is EmbeddedResource -> it.resource.toString()
                     is AudioContent -> it.data
                     is ImageContent -> it.data
-                    is TextContent -> it.text ?: "<empty>"
-                    is UnknownContent -> "unknown"
+                    is TextContent -> it.text
+                    is ResourceLink -> it.toString()
                 }
             }
 
             if (response.isError == true) {
                 agent.logger.warn { "Failed to call tool $toolName: $text" }
             } else {
-                agent.logger.info { "Tool $toolName returned: $text" }
+                agent.logger.debug { "Tool $toolName returned: $text" }
             }
         } catch (e: SerializationException) {
             agent.logger.error(e) { "Failed to call tool $toolName: bad input" }

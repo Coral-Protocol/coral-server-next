@@ -6,6 +6,7 @@ import com.sksamuel.hoplite.ExperimentalHoplite
 import io.ktor.server.cio.*
 import io.ktor.server.engine.*
 import kotlinx.serialization.json.Json
+import net.peanuuutz.tomlkt.Toml
 import org.coralprotocol.coralserver.modules.*
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
@@ -18,6 +19,7 @@ fun main(args: Array<String>) {
             configModule,
             configModuleParts,
             loggingModule,
+            namedLoggingModule,
             blockchainModule,
             networkModule,
             agentModule,
@@ -28,6 +30,11 @@ fun main(args: Array<String>) {
                         encodeDefaults = true
                         prettyPrint = true
                         explicitNulls = false
+                    }
+                }
+                single {
+                    Toml {
+                        ignoreUnknownKeys = false
                     }
                 }
             }

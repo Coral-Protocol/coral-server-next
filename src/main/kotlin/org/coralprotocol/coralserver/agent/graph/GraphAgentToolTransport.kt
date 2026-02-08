@@ -7,9 +7,9 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import io.modelcontextprotocol.kotlin.sdk.CallToolRequest
-import io.modelcontextprotocol.kotlin.sdk.CallToolResult
-import io.modelcontextprotocol.kotlin.sdk.TextContent
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequest
+import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
+import io.modelcontextprotocol.kotlin.sdk.types.TextContent
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -55,7 +55,8 @@ sealed interface GraphAgentToolTransport : KoinComponent {
 
                 val urlWithSessionAndAgentPaths = URLBuilder(urlString = url)
                     .appendPathSegments(sessionId, agent.name).buildString()
-                agent.logger.info { "Making custom tool call POST to $urlWithSessionAndAgentPaths" }
+
+                agent.logger.info { "Calling custom tool $name, posting to $urlWithSessionAndAgentPaths" }
                 val response = client.post(urlWithSessionAndAgentPaths) {
                     contentType(ContentType.Application.Json)
                     addJsonBodyWithSignature(json, config.customToolSecret, request.arguments, signatureHeader)

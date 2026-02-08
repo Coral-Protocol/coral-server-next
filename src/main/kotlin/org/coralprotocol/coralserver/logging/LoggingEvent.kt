@@ -7,7 +7,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonClassDiscriminator
-import kotlin.time.Clock
+import org.coralprotocol.coralserver.util.InstantSerializer
+import org.coralprotocol.coralserver.util.utcTimeNow
 import kotlin.time.ExperimentalTime
 
 @Serializable
@@ -16,8 +17,9 @@ sealed class LoggingEvent {
     abstract fun log(nativeLogger: org.slf4j.Logger)
     abstract val tags: Set<LoggingTag>
 
+    @Serializable(with = InstantSerializer::class)
     @Suppress("unused")
-    val timestampUtc = Clock.System.now().toString()
+    val timestamp = utcTimeNow()
 
     @Serializable
     @SerialName("info")
@@ -40,6 +42,29 @@ sealed class LoggingEvent {
             nativeLogger.warn(text)
         }
     }
+
+    @Serializable
+    @SerialName("trace")
+    data class Trace(
+        val text: String,
+        override val tags: Set<LoggingTag> = setOf(LoggingTag.Sensitive),
+    ) : LoggingEvent() {
+        override fun log(nativeLogger: org.slf4j.Logger) {
+            nativeLogger.trace(text)
+        }
+    }
+
+    @Serializable
+    @SerialName("debug")
+    data class Debug(
+        val text: String,
+        override val tags: Set<LoggingTag> = setOf(LoggingTag.Sensitive),
+    ) : LoggingEvent() {
+        override fun log(nativeLogger: org.slf4j.Logger) {
+            nativeLogger.debug(text)
+        }
+    }
+
 
     @Serializable
     @SerialName("error")

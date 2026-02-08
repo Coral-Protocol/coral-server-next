@@ -1,12 +1,10 @@
+@file:OptIn(ExperimentalTime::class)
+
 package org.coralprotocol.coralserver.session
 
 import io.ktor.utils.io.*
 import org.coralprotocol.coralserver.agent.graph.GraphAgentProvider
-import org.coralprotocol.coralserver.agent.registry.option.AgentOptionTransport
-import org.coralprotocol.coralserver.agent.registry.option.asEnvVarValue
-import org.coralprotocol.coralserver.agent.registry.option.asFileSystemValue
-import org.coralprotocol.coralserver.agent.registry.option.option
-import org.coralprotocol.coralserver.agent.registry.option.toDisplayString
+import org.coralprotocol.coralserver.agent.registry.option.*
 import org.coralprotocol.coralserver.agent.runtime.ApplicationRuntimeContext
 import org.coralprotocol.coralserver.agent.runtime.RuntimeId
 import org.coralprotocol.coralserver.config.AddressConsumer
@@ -14,9 +12,12 @@ import org.coralprotocol.coralserver.config.DebugConfig
 import org.coralprotocol.coralserver.config.DockerConfig
 import org.coralprotocol.coralserver.events.SessionEvent
 import org.coralprotocol.coralserver.session.reporting.SessionAgentUsageReport
+import org.coralprotocol.coralserver.util.utcTimeNow
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 class SessionAgentExecutionContext(
     val agent: SessionAgent,
@@ -39,7 +40,7 @@ class SessionAgentExecutionContext(
 
     val disposableResources = mutableListOf<SessionAgentDisposableResource>()
 
-    var lastLaunchTime: Long? = null
+    var lastLaunchTime: Instant? = null
 
     /**
      * A list of usage reports for this agent.  When a session ends, all usage reports for each agent will be sent to
@@ -105,7 +106,8 @@ class SessionAgentExecutionContext(
 
             // Coral environment variables
             this["CORAL_CONNECTION_URL"] =
-                applicationRuntimeContext.getMcpUrl(this@SessionAgentExecutionContext, addressConsumer).toString()
+                applicationRuntimeContext.getStreamableHttpUrl(this@SessionAgentExecutionContext, addressConsumer)
+                    .toString()
             this["CORAL_AGENT_ID"] = agent.name
             this["CORAL_AGENT_SECRET"] = agent.secret
             this["CORAL_SESSION_ID"] = agent.session.id
@@ -169,7 +171,7 @@ class SessionAgentExecutionContext(
      * Called immediately before the runtime starts.
      */
     private suspend fun handleRuntimeStarted() {
-        lastLaunchTime = System.currentTimeMillis()
+        lastLaunchTime = utcTimeNow()
         session.events.emit((SessionEvent.RuntimeStarted(name)))
     }
 
@@ -184,7 +186,7 @@ class SessionAgentExecutionContext(
                     name,
                     registryAgent.identifier,
                     startTime,
-                    System.currentTimeMillis()
+                    utcTimeNow()
                 )
             )
         }

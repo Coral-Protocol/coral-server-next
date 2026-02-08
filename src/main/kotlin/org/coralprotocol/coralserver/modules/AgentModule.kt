@@ -1,40 +1,45 @@
 package org.coralprotocol.coralserver.modules
 
-import org.coralprotocol.coralserver.agent.debug.EchoDebugAgent
-import org.coralprotocol.coralserver.agent.debug.PuppetDebugAgent
-import org.coralprotocol.coralserver.agent.debug.SeedDebugAgent
-import org.coralprotocol.coralserver.agent.debug.ToolDebugAgent
+import kotlinx.coroutines.runBlocking
+import org.coralprotocol.coralserver.agent.debug.*
 import org.coralprotocol.coralserver.agent.registry.AgentRegistry
 import org.coralprotocol.coralserver.config.RegistryConfig
 import org.coralprotocol.coralserver.mcp.McpToolManager
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
-import java.nio.file.Path
 
 val agentModule = module {
     singleOf(::EchoDebugAgent)
     singleOf(::SeedDebugAgent)
     singleOf(::ToolDebugAgent)
     singleOf(::PuppetDebugAgent)
+    singleOf(::SocketDebugAgent)
 
     single(createdAtStart = true) {
         val config: RegistryConfig = get()
         AgentRegistry {
-            if (config.enableMarketplaceAgentRegistrySource)
-                addMarketplace()
+            if (config.enableMarketplaceAgentRegistrySource) {
+                runBlocking {
+                    addMarketplaceSource()
+                }
+            }
 
-            config.localRegistries.forEach { addLocal(Path.of(it)) }
+            config.localAgents.forEach {
+                logger.trace { "watching for agents matching pattern: $it" }
+                addFileBasedSource(it, config.watchLocalAgents, config.localAgentRescanTimer)
+            }
 
             if (config.includeDebugAgents) {
                 addLocalAgents(
+                    "debug agents",
                     listOf(
                         get<EchoDebugAgent>().generate(),
                         get<SeedDebugAgent>().generate(),
                         get<ToolDebugAgent>().generate(),
-                        get<PuppetDebugAgent>().generate()
-                    ),
-                    "debug agents"
+                        get<PuppetDebugAgent>().generate(),
+                        get<SocketDebugAgent>().generate()
+                    )
                 )
             }
         }

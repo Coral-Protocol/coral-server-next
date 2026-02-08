@@ -5,6 +5,7 @@ import io.kotest.assertions.ktor.client.shouldHaveStatus
 import io.kotest.assertions.nondeterministic.continually
 import io.kotest.assertions.throwables.shouldNotThrowAny
 import io.kotest.assertions.withClue
+import io.kotest.core.NamedTag
 import io.kotest.inspectors.forAll
 import io.kotest.matchers.booleans.shouldBeTrue
 import io.kotest.matchers.collections.shouldBeEmpty
@@ -22,7 +23,7 @@ import io.ktor.server.application.*
 import io.ktor.server.resources.post
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.modelcontextprotocol.kotlin.sdk.Tool
+import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
@@ -73,6 +74,7 @@ class SessionApiTest : CoralTest({
         val registry by inject<AgentRegistry>()
         registry.sources.add(
             ListAgentRegistrySource(
+                "test agents",
                 listOf(registryAgent(agentName) {
                     version = agentVersion
                     runtime(FunctionRuntime { executionContext, _ ->
@@ -151,7 +153,7 @@ class SessionApiTest : CoralTest({
         sessionManager.waitAllSessions()
     }
 
-    test("testSessionState") {
+    test("testSessionState").config(tags = setOf(NamedTag("noisy"))) {
         val client by inject<HttpClient>()
         val localSessionManager by inject<LocalSessionManager>()
 
@@ -385,13 +387,7 @@ class SessionApiTest : CoralTest({
                                 transport = GraphAgentToolTransport.Http(
                                     url = toolUrl,
                                 ),
-                                schema = Tool(
-                                    name = toolName,
-                                    description = "A tool in a unit test",
-                                    inputSchema = Tool.Input(), // no verification is done on this
-                                    outputSchema = null,
-                                    annotations = null,
-                                )
+                                schema = ToolSchema()
                             )
                         )
                         isolateAllAgents()
